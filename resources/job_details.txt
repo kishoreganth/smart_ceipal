@@ -1,0 +1,11 @@
+Job ID: 728686
+
+Job_description:
+Qlik Sense developerErlanger, Kentucky OnsitePay rate $80/hrKey Responsibilities and SkillsData Modeling and ETLCandidates need to be able to design and implement efficient data models and ETL pipelines often using SQL or other toolsQlik Sense DevelopmentThis involves creating interactive dashboards charts and reports using Qlik Senses visualization capabilitiesData Transformation and QVDsExperience with data transformation techniques including the creation of QVD files QlikView Data is essentialFrontend DevelopmentSkills in frontend development and knowledge of visualization best practices are also importantSQL and Database DesignStrong SQL skills and experience with relational database management systems RDMS like MS SQL Server or Oracle are often requiredCommunication and CollaborationCandidates need to be able to communicate technical insights interpret data and work with business users to understand their needsTroubleshooting and ProblemSolvingExperience in troubleshooting and resolving issues related to Qlik Sense applications is also a valuable skillAdministration If applicableFor Qlik Sense Administrator roles tasks include managing the Qlik Sense environment including installing configuring and upgrading the software managing user access and monitoring performanceExperience and EducationExperience Qlik Sense developer roles typically require 3-8 years of experience but this can vary depending on the specific roleEducation A bachelors degree or equivalent experience is generally requiredQlik Sense Certification While not always mandatory Qlik Sense certification can be a plus
+
+Skills:
+Mandatory Skills :ANSI-SQL, Dimensional Data Modeling, Qlik Catalog, Qlik Compose, Qlik Replicate
+
+Recruiter:
+[{'name': 'Govind Rajan', 'email': 'Govind.Rajan@ltimindtree.com'}]
+
