@@ -26,7 +26,8 @@ async_openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI(
     title="LTIMindtree Job Scraper API",
     description="API to retrieve job details from LTIMindtree RippleHire portal",
-    version="1.0.0"
+    version="1.0.0",
+    redirect_slashes=False
 )
 
 @app.get("/job/details")
