@@ -30,16 +30,44 @@ app = FastAPI(
 )
 
 @app.get("/job/details")
-async def get_job_details(job_id: str = Query(..., description="The job ID to search for")):
+async def get_job_details(job_id: str = Query(..., description="The job ID to search for"),
+                           country: str = Query(None, description="The country to search in (USA or INDIA)")):
     """
     Get job details from LTIMindtree RippleHire portal
     
     Returns job description and recruiter information for the specified job ID
     """
     try:
-        # Get credentials from environment variables
-        username = os.getenv("ripple_username")
-        password = os.getenv("ripple_password")
+        # Validate country parameter
+        if not country:
+            return JSONResponse(
+                content={
+                    "status": "error",
+                    "message": "Country parameter is required. Please specify either 'USA' or 'INDIA'.",
+                    "data": []
+                },
+                status_code=200
+            )
+            
+        # Convert country to uppercase for case-insensitive comparison
+        country = country.upper()
+        if country not in ["USA", "INDIA"]:
+            return JSONResponse(
+                content={
+                    "status": "error",
+                    "message": "Invalid country. Please specify either 'USA' or 'INDIA'.",
+                    "data": []
+                },
+                status_code=200
+            )
+
+        if country == "USA":
+            # Get credentials from environment variables
+            username = os.getenv("ripple_username")
+            password = os.getenv("ripple_password")
+        else:
+            username = os.getenv("ripple_username_india")
+            password = os.getenv("ripple_password_india")
         
         if not username or not password:
             raise HTTPException(
@@ -50,8 +78,22 @@ async def get_job_details(job_id: str = Query(..., description="The job ID to se
         # Call the scraping function with the provided job ID
         print(f"Attempting to scrape job details from ripplehire for job ID: {job_id}")
         result = login_and_scrape(username, password, job_id)
+                
+        print("result ", result)
+        print("type of result ", type(result))
         print(f"Scraper returned result: {result is not None}")
         
+        # check if result is empty or job description is empty
+        if not result or not result.get("job_description"):
+            return JSONResponse(
+                content={
+                    "status": "error",
+                    "message": "No job details found or job description is empty. Please check the job ID.",
+                    "data": []
+                },
+                status_code=200
+            )
+
         # # # Transform the result into the required data format
         data = transform_job_data(result)
         print("transformed data ", data)
@@ -70,9 +112,9 @@ async def get_job_details(job_id: str = Query(..., description="The job ID to se
             
             # Update the job description with the formatted version
             data[0]["job_description"] = formatted_jd["job_description"]
-            data[0]["client_bill_rate___salary"] = formatted_jd["rate"]
+            data[0]["client_bill_rate___salary"] = formatted_jd["rate"] if formatted_jd["rate"] else "N/A"
             # data[0]["client_bill_rate___salary"] = 24
-            data[0]["description_cleaned"] = True
+            # data[0]["description_cleaned"] = True
             
             # check if the job title is a contractor job and a variable for both condition like a flag to pass in gen_ai_output
             # IF contractor job then job_title should be extracted from the job description using gen_ai_output( formatted_jd )
@@ -84,20 +126,48 @@ async def get_job_details(job_id: str = Query(..., description="The job ID to se
             
         else:
             print("No job description to format")
-            data[0]["description_cleaned"] = False
-        
+            # data[0]["description_cleaned"] = False
+        # data[0]["job_title"] = data[0]["job_title"][:50]
         # Create job post in Ceipal
         final_data = {}
         final_data["recruitment_manager"] = data[0]["recruitment_manager"]
         final_data["job_title"] = data[0]["job_title"]
         
         try:
-            ceipal = CeipalAPI()
-
+            ceipal = CeipalAPI(country)
+            ceipal_data =[{
+                "job_title": data[0]["job_title"],
+                "remote_job": 1,
+                "job_status": 6,
+                # "country": "",
+                "client": "z5G7h3l6a1kMvyS65NP3c1Wey4ZBSspA_4KksTSjJxU=",
+                # "states": 0,
+                "recruitment_manager":"z5G7h3l6a1kMvyS65NP3c0wyhFsf0_8F-nELY1aw5Wk=",
+                # "city": "",
+                "job_type": data[0]["job_type"],
+                "client_manager": data[0]["client_manager"],
+                "client_job_id": data[0]["client_job_id"],
+                "primary_skills": data[0]["primary_skills"],
+                "location": data[0]["location"],
+                "job_description": data[0]["job_description"],
+                "client_bill_rate___salary": data[0]["client_bill_rate___salary"]
+            }]
+            print("DATA ", data)
             # This is to create the job post in Ceipal and get the job URL
-            new_data = create_job_post(data, ceipal)
+            new_data = create_job_post(data, ceipal, country)
             print("new data ", new_data)
             print("type of new data ", type(new_data))
+            
+            if new_data is None:
+                return JSONResponse(
+                    content={
+                        "status": "error",
+                        "message": "Failed to create Ceipal job post",
+                        "data": []
+                    },
+                    status_code=200
+                )
+                
             dummy_created_job = [{'status': 201, 'job_code': 'JPC -  31435', 'job_posting_id': 31429, 'message': 'Job posting created successfully.', 'success': 'Y'}]
             # job_details = ceipal.get_job("31429")
             all_jobs_listing_details = ceipal.list_jobs()
@@ -278,20 +348,21 @@ def transform_job_data(result):
     return data
 
 
-def create_job_post(data, ceipal):
+def create_job_post(data, ceipal, country):
     
     try:
         access_token = ceipal.authenticate()
         access_token = ceipal.authenticate()
 
         print("Authenticated with Ceipal API, sending job data...")
-        new_job = ceipal.create_job(data)
+        # Use the country-specific URL from the CeipalAPI instance
+        new_job = ceipal.create_job(data, country)
         print("API Response:", new_job)
         # print(f"Created new job with ID: {new_job.get('id')}")
         return new_job
     except Exception as e:
         print(f"Error: {str(e)}")
-        
+        return None
 
 # async def get_client_contacts(api_key=None):
 #     """

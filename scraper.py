@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import os
 import json
+from selenium.webdriver.common.action_chains import ActionChains
 
 # Load environment variables from .env file
 print("Loading environment variables from .env file")
@@ -170,65 +171,66 @@ def login_and_scrape(username, password, job_id=None):
                     {"desc": "by search text", "find": lambda: driver.find_element(By.XPATH, "//*[contains(text(),'SEARCH')]")}
                 ]
                 
-                for method in search_button_methods:
-                    try:
-                        search_button = method["find"]()
-                        print(f"Found search button {method['desc']}")
-                        break
-                    except Exception:
-                        continue
+                max_retries = 3
+                retry_count = 0
+                click_success = False
                 
-                if search_button:
+                while retry_count < max_retries and not click_success:
                     try:
-                        # Try to make the button clickable
-                        # First, scroll the button into view
-                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", search_button)
-                        time.sleep(0.5)  # Reduced from 1 second
+                        # Try to find the search button
+                        for method in search_button_methods:
+                            try:
+                                search_button = method["find"]()
+                                print(f"Found search button {method['desc']}")
+                                break
+                            except Exception:
+                                continue
                         
-                        # Wait for it to be clickable - reduce timeout
-                        WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, search_button.get_attribute("id"))))
-                        search_button.click()
-                        print("Clicked search button")
-                    except Exception as e:
-                        print(f"Could not click search button normally: {e}")
-                        try:
-                            # Try JavaScript click as a fallback
-                            driver.execute_script("arguments[0].click();", search_button)
-                            print("Clicked search button using JavaScript")
-                        except Exception as js_error:
-                            print(f"JavaScript click also failed: {js_error}")
-                            # Try to find the magnifying glass button (yellow button in screenshot)
+                        if search_button:
+                            # Try multiple click methods
+                            click_methods = [
+                                {"name": "standard click", "action": lambda: search_button.click()},
+                                {"name": "JavaScript click", "action": lambda: driver.execute_script("arguments[0].click();", search_button)},
+                                {"name": "Action Chains click", "action": lambda: ActionChains(driver).move_to_element(search_button).click().perform()},
+                                {"name": "form submit", "action": lambda: search_input.submit()},
+                                {"name": "Enter key", "action": lambda: search_input.send_keys(webdriver.Keys.RETURN)}
+                            ]
+                            
+                            for click_method in click_methods:
+                                try:
+                                    click_method["action"]()
+                                    print(f"Successfully clicked using {click_method['name']}")
+                                    click_success = True
+                                    break
+                                except Exception as e:
+                                    print(f"Failed to click using {click_method['name']}: {str(e)}")
+                                    continue
+                            
+                            if click_success:
+                                break
+                        
+                        # If all click methods failed, try the yellow button
+                        if not click_success:
                             try:
                                 yellow_button = driver.find_element(By.CSS_SELECTOR, "button.btn-warning")
                                 yellow_button.click()
                                 print("Clicked yellow search button")
+                                click_success = True
                             except Exception:
-                                print("Could not find yellow search button, trying to submit the form")
-                                try:
-                                    # Try to submit the form directly
-                                    search_input.submit()
-                                    print("Submitted search form")
-                                except Exception as submit_error:
-                                    print(f"Form submission failed: {submit_error}")
-                                    # Last resort - hit Enter key
-                                    search_input.send_keys(webdriver.Keys.RETURN)
-                                    print("Sent Enter key to search input")
-                else:
-                    print("Could not find search button, trying direct methods")
-                    # Try to interact with the yellow search button visible in the screenshot
-                    try:
-                        yellow_button = driver.find_element(By.CSS_SELECTOR, ".btn-warning")
-                        yellow_button.click()
-                        print("Clicked yellow search button")
-                    except Exception:
-                        try:
-                            # Try to submit the form directly
-                            search_input.submit()
-                            print("Submitted search form directly")
-                        except Exception:
-                            # Last resort - hit Enter key
-                            search_input.send_keys(webdriver.Keys.RETURN)
-                            print("Sent Enter key to search input")
+                                print("Could not find or click yellow search button")
+                        
+                    except Exception as e:
+                        print(f"Attempt {retry_count + 1} failed: {str(e)}")
+                    
+                    if not click_success:
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            print(f"Retrying... (Attempt {retry_count + 1} of {max_retries})")
+                            time.sleep(2)  # Wait before retrying
+                
+                if not click_success:
+                    print("Failed to click search button after all retries")
+                    return {"error": "Failed to perform job search after multiple attempts"}
                 
                 # Wait for search results - reduce delay
                 time.sleep(1.5)  # Reduced from random.uniform(2, 4)
@@ -432,7 +434,6 @@ def login_and_scrape(username, password, job_id=None):
                                     
                                     # Method 3: Action chains
                                     try:
-                                        from selenium.webdriver.common.action_chains import ActionChains
                                         actions = ActionChains(driver)
                                         actions.move_to_element(job_title_link).click().perform()
                                         click_success = True
@@ -878,8 +879,8 @@ def login_and_scrape(username, password, job_id=None):
                     
                     return job_info
                 else:
-                    print("No job listings found on the page")
-                    return {"error": "No job listings found"}
+                    print("No job listings found on the page, Returning empty dictionary")
+                    return {}
                     
             except Exception as e:
                 print(f"Error during job search: {e}")

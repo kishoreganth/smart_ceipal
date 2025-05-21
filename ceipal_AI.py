@@ -14,7 +14,7 @@ class CeipalAPI:
     Based on documentation from: https://developer.ceipal.com/ceipal-ats-version-one/authentication
     """
     
-    def __init__(self, base_url=None, email=None, password=None, api_key=None):
+    def __init__(self, country,base_url=None, email=None, password=None, api_key=None):
         """
         Initialize the Ceipal API client
         
@@ -28,10 +28,18 @@ class CeipalAPI:
         self.auth_url = f"{self.base_url}/createAuthtoken"
         self.jobs_url = f"{self.base_url}/job-postings"
         
-        # Auth credentials
-        self.email = email or os.getenv("CEIPAL_EMAIL")
-        self.password = password or os.getenv("CEIPAL_PASSWORD")
-        self.api_key = api_key or os.getenv("CEIPAL_API_KEY")
+
+        if country == "USA":
+            # Auth credentials
+            self.email = email or os.getenv("CEIPAL_EMAIL")
+            self.password = password or os.getenv("CEIPAL_PASSWORD")
+            self.api_key = api_key or os.getenv("CEIPAL_API_KEY")
+
+        elif country == "INDIA":
+            # Auth credentials
+            self.email = email or os.getenv("CEIPAL_EMAIL_INDIA")
+            self.password = password or os.getenv("CEIPAL_PASSWORD_INDIA")
+            self.api_key = api_key or os.getenv("CEIPAL_API_KEY_INDIA")
         
         # Token info
         self.access_token = None
@@ -275,7 +283,7 @@ class CeipalAPI:
             print(error_message)
             raise Exception(error_message)
     
-    def create_job(self, job_data):
+    def create_job(self, job_data,country):
         """
         Create a new job posting
         
@@ -298,7 +306,10 @@ class CeipalAPI:
         """
         headers = self.get_auth_headers()
         
-        url = "https://api.ceipal.com/savecustomJobPostingDetails/Z3RkUkt2OXZJVld2MjFpOVRSTXoxZz09/5735c56dccb6e492971df18e2cae3b5b/"
+        if country == "USA":
+            url = "https://api.ceipal.com/savecustomJobPostingDetails/Z3RkUkt2OXZJVld2MjFpOVRSTXoxZz09/5735c56dccb6e492971df18e2cae3b5b/"
+        elif country == "INDIA":
+            url = "https://api.ceipal.com/savecustomJobPostingDetails/Z3RkUkt2OXZJVld2MjFpOVRSTXoxZz09/8e0672367e5e89e87f4383486bf82de8/"
         # response = requests.post(self.jobs_url, headers=headers, json=job_data)
         
         response = requests.post(url, headers=headers, json=job_data)
