@@ -571,7 +571,9 @@ async def gen_ai_output(prompt, temperature=0.7):
             "job_title": ""
         }
 
-
+@app.get("/")
+async def home():
+    return {"message": "Welcome to the LTIMindtree Job Scraper API"}
 
 if __name__ == "__main__":
     # Start the API server when script is run directly
