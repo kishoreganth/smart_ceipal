@@ -105,7 +105,7 @@ def login_and_scrape(username, password, job_id=None):
         # Initialize the WebDriver with error handling
         try:
             # chrome_driver_path = get_chrome_driver_path()
-            chrome_driver_path = "/smart_ceipal/drivers/chromedriver"
+            chrome_driver_path = "/home/ubuntu/smart_ceipal/drivers/chromedriver"  ## AWS ubuntu user
             driver = webdriver.Chrome(service=Service(chrome_driver_path), options=chrome_options)
         except Exception as e:
             print(f"Error initializing Chrome driver: {e}")
