@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Query, HTTPException, Body
+from fastapi import FastAPI, Query, HTTPException, Body, Depends, Security
 from fastapi.responses import JSONResponse
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
 import uvicorn
 import os
@@ -13,6 +14,20 @@ from openai import AsyncOpenAI
 
 # Load environment variables
 load_dotenv()
+
+# API Key security scheme
+API_KEY_NAME = "X-API-Key"
+API_KEY = os.getenv("API_KEY")  # Get API key from environment variable
+
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
+
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    if api_key_header != API_KEY:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API Key"
+        )
+    return api_key_header
 
 # Define Pydantic models for request validation
 class PromptRequest(BaseModel):
@@ -31,12 +46,17 @@ app = FastAPI(
 )
 
 @app.get("/job/details")
-async def get_job_details(job_id: str = Query(..., description="The job ID to search for"),
-                           country: str = Query(None, description="The country to search in (USA or INDIA)")):
+async def get_job_details(
+    job_id: str = Query(..., description="The job ID to search for"),
+    country: str = Query(None, description="The country to search in (USA or INDIA)"),
+    api_key: str = Depends(get_api_key)
+):
     """
     Get job details from LTIMindtree RippleHire portal
     
     Returns job description and recruiter information for the specified job ID
+    
+    Requires API key authentication via X-API-Key header
     """
     try:
         # Validate country parameter
@@ -89,7 +109,7 @@ async def get_job_details(job_id: str = Query(..., description="The job ID to se
             return JSONResponse(
                 content={
                     "status": "error",
-                    "message": "No job details found or job description is empty. Please check the job ID.",
+                    "message": "No job details found or job description is empty. Please try again or check the job ID.",
                     "data": []
                 },
                 status_code=200

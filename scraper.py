@@ -26,6 +26,54 @@ DEFAULT_PASSWORD = "Smart@2024"
 # Create resources directory if it doesn't exist
 os.makedirs('resources', exist_ok=True)
 
+def get_chrome_driver_path():
+    """
+    Get the ChromeDriver path. First check if a local ChromeDriver exists in the drivers directory.
+    If not found, download it using ChromeDriverManager and save it to the drivers directory.
+    """
+    # Create drivers directory if it doesn't exist
+    drivers_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "drivers")
+    os.makedirs(drivers_dir, exist_ok=True)
+    
+    # Check if ChromeDriver exists in the drivers directory
+    chrome_driver_path = None
+    if os.name == 'nt':  # Windows
+        chrome_driver_path = os.path.join(drivers_dir, "chromedriver.exe")
+    else:  # Linux/Mac
+        chrome_driver_path = os.path.join(drivers_dir, "chromedriver")
+    
+    # Check environment variable for chrome driver path override
+    if os.environ.get("CHROME_DRIVER_PATH"):
+        env_driver_path = os.environ.get("CHROME_DRIVER_PATH")
+        if os.path.exists(env_driver_path):
+            print(f"Using ChromeDriver from environment variable: {env_driver_path}")
+            return env_driver_path
+    
+    # If driver exists in our directory, use it
+    if os.path.exists(chrome_driver_path):
+        print(f"Using existing ChromeDriver: {chrome_driver_path}")
+        return chrome_driver_path
+    
+    # If not found, download it using ChromeDriverManager and save it
+    print("ChromeDriver not found. Downloading using ChromeDriverManager...")
+    downloaded_path = ChromeDriverManager().install()
+    
+    # Copy the downloaded driver to our drivers directory
+    import shutil
+    try:
+        shutil.copy2(downloaded_path, chrome_driver_path)
+        # Make it executable on Linux/Mac
+        if os.name != 'nt':
+            import stat
+            st = os.stat(chrome_driver_path)
+            os.chmod(chrome_driver_path, st.st_mode | stat.S_IEXEC)
+        print(f"ChromeDriver saved to: {chrome_driver_path}")
+        return chrome_driver_path
+    except Exception as e:
+        print(f"Error saving ChromeDriver to {chrome_driver_path}: {e}")
+        # Return the downloaded path as fallback
+        return downloaded_path
+
 def login_and_scrape(username, password, job_id=None):
     """
     Log in to the RippleHire portal and scrape About LTIMindtree information
@@ -56,7 +104,8 @@ def login_and_scrape(username, password, job_id=None):
     try:
         # Initialize the WebDriver with error handling
         try:
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+            chrome_driver_path = get_chrome_driver_path()
+            driver = webdriver.Chrome(service=Service(chrome_driver_path), options=chrome_options)
         except Exception as e:
             print(f"Error initializing Chrome driver: {e}")
             return None
