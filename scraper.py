@@ -106,6 +106,8 @@ def login_and_scrape(username, password, job_id=None):
         try:
             # chrome_driver_path = get_chrome_driver_path()
             chrome_driver_path = "/home/ubuntu/smart_ceipal/drivers/chromedriver"  ## AWS ubuntu user
+            print(f"Using ChromeDriver at: {chrome_driver_path}")
+
             driver = webdriver.Chrome(service=Service(chrome_driver_path), options=chrome_options)
         except Exception as e:
             print(f"Error initializing Chrome driver: {e}")
