@@ -11,10 +11,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# ChromeDriver executables
-chromedriver
-chromedriver.exe
-drivers/
+
 
 # Resources directory (contains screenshots and other outputs)
 resources/
