@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     curl \
     xvfb \
+    jq \
     # Chrome dependencies
     fonts-liberation \
     libasound2 \
@@ -61,14 +62,22 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p drivers resources
 
-# Download and install ChromeDriver
-RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d'.' -f1) \
-    && CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION") \
-    && wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip" \
+# Download and install ChromeDriver using the new Chrome for Testing API
+RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}') \
+    && echo "Chrome version: $CHROME_VERSION" \
+    && CHROMEDRIVER_URL="https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json" \
+    && CHROMEDRIVER_VERSION=$(curl -s $CHROMEDRIVER_URL | jq -r ".versions[] | select(.version==\"$CHROME_VERSION\") | .downloads.chromedriver[] | select(.platform==\"linux64\") | .url" | head -1) \
+    && if [ -z "$CHROMEDRIVER_VERSION" ]; then \
+        echo "Exact version not found, trying latest stable..." \
+        && CHROMEDRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json" | jq -r '.channels.Stable.downloads.chromedriver[] | select(.platform=="linux64") | .url'); \
+    fi \
+    && echo "ChromeDriver URL: $CHROMEDRIVER_VERSION" \
+    && wget -O /tmp/chromedriver.zip "$CHROMEDRIVER_VERSION" \
     && unzip /tmp/chromedriver.zip -d /tmp/ \
-    && mv /tmp/chromedriver ./drivers/chromedriver \
+    && find /tmp -name "chromedriver" -type f -exec mv {} ./drivers/chromedriver \; \
     && chmod +x ./drivers/chromedriver \
-    && rm /tmp/chromedriver.zip
+    && rm -rf /tmp/chromedriver* \
+    && ./drivers/chromedriver --version
 
 # Expose port 8000
 EXPOSE 8000
