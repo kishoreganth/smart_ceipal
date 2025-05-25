@@ -1,0 +1,61 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: smart-ceipal-app
+    ports:
+      - "8000:8000"
+    environment:
+      # API Configuration
+      - API_KEY=${API_KEY:-your_secure_api_key_here}
+      
+      # RippleHire Credentials - USA
+      - ripple_username=${RIPPLE_USERNAME_USA}
+      - ripple_password=${RIPPLE_PASSWORD_USA}
+      
+      # RippleHire Credentials - India
+      - ripple_username_india=${RIPPLE_USERNAME_INDIA}
+      - ripple_password_india=${RIPPLE_PASSWORD_INDIA}
+      
+      # OpenAI API Key
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Ceipal API Configuration
+      - CEIPAL_API_KEY=${CEIPAL_API_KEY}
+      
+      # Chrome Configuration
+      - DISPLAY=:99
+      - CHROME_DRIVER_PATH=/smart_ceipal/drivers/chromedriver
+      
+    volumes:
+      # Mount .env file if it exists
+      - ./.env:/smart_ceipal/.env:ro
+      # Mount resources directory to persist screenshots and logs
+      - ./resources:/smart_ceipal/resources
+      # Mount drivers directory to persist ChromeDriver
+      - ./drivers:/smart_ceipal/drivers
+    
+    restart: always
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5' 

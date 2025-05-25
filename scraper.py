@@ -91,13 +91,37 @@ def login_and_scrape(username, password, job_id=None):
     chrome_options.add_argument("--headless")  # Enable headless mode for production
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    chrome_options.add_argument("--disable-background-timer-throttling")
+    chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+    chrome_options.add_argument("--disable-renderer-backgrounding")
+    chrome_options.add_argument("--disable-features=TranslateUI")
+    chrome_options.add_argument("--disable-ipc-flooding-protection")
     
     # Add these options to better evade detection
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option("useAutomationExtension", False)
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    chrome_options.binary_location = "/usr/bin/google-chrome-stable"
+    
+    # Set Chrome binary location - check multiple paths for Docker and EC2 compatibility
+    chrome_binary_paths = [
+        "/usr/bin/google-chrome-stable",  # Docker container
+        "/usr/bin/google-chrome",         # Ubuntu EC2
+        "/usr/bin/chromium-browser",      # Alternative
+        "/usr/bin/chromium"               # Alternative
+    ]
+    
+    for binary_path in chrome_binary_paths:
+        if os.path.exists(binary_path):
+            chrome_options.binary_location = binary_path
+            print(f"Using Chrome binary: {binary_path}")
+            break
+    else:
+        print("Warning: Could not find Chrome binary, using default")
 
     # Initialize the WebDriver
     driver = None
@@ -105,9 +129,16 @@ def login_and_scrape(username, password, job_id=None):
     try:
         # Initialize the WebDriver with error handling
         try:
-            # chrome_driver_path = get_chrome_driver_path()
-            chrome_driver_path = "/home/ubuntu/smart_ceipal/drivers/chromedriver"  ## AWS ubuntu user
-            print(f"Using ChromeDriver at: {chrome_driver_path}")
+            # Check if we're in Docker and use the appropriate path
+            if os.path.exists("/smart_ceipal/drivers/chromedriver"):
+                chrome_driver_path = "/smart_ceipal/drivers/chromedriver"
+                print(f"Using Docker ChromeDriver at: {chrome_driver_path}")
+            elif os.path.exists("/home/ubuntu/smart_ceipal/drivers/chromedriver"):
+                chrome_driver_path = "/home/ubuntu/smart_ceipal/drivers/chromedriver"  ## AWS ubuntu user
+                print(f"Using AWS Ubuntu ChromeDriver at: {chrome_driver_path}")
+            else:
+                chrome_driver_path = get_chrome_driver_path()
+                print(f"Using ChromeDriver from get_chrome_driver_path: {chrome_driver_path}")
 
             driver = webdriver.Chrome(service=Service(executable_path=chrome_driver_path), options=chrome_options)
         except Exception as e:
