@@ -82,5 +82,5 @@ RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}') \
 # Expose port 8000
 EXPOSE 8000
 
-# Start Xvfb and run the application
-CMD ["sh", "-c", "Xvfb :99 -screen 0 1024x768x16 & uvicorn api:app --host 0.0.0.0 --port 8000"] 
+# Start Xvfb and run the application with proper cleanup
+CMD ["sh", "-c", "rm -f /tmp/.X99-lock && Xvfb :99 -screen 0 1024x768x16 -ac +extension GLX +render -noreset & sleep 2 && uvicorn api:app --host 0.0.0.0 --port 8000"] 
