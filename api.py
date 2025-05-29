@@ -179,15 +179,26 @@ async def get_job_details(
             print("new data ", new_data)
             print("type of new data ", type(new_data))
             
-            if new_data is None:
+            # check if the job is already posted in Ceipal
+            if new_data[0]["status"] != 201:
                 return JSONResponse(
                     content={
                         "status": "error",
-                        "message": "Failed to create Ceipal job post",
+                        "message": f"Job Failed to post in Ceipal and the ripple job id is {data[0]['client_job_id']}",
                         "data": []
                     },
-                    status_code=200
+                    status_code=500
                 )
+                
+            # if new_data is None:
+            #     return JSONResponse(
+            #         content={
+            #             "status": "error",
+            #             "message": "Failed to create Ceipal job post",
+            #             "data": []
+            #         },
+            #         status_code=200
+            #     )
                 
             dummy_created_job = [{'status': 201, 'job_code': 'JPC -  31435', 'job_posting_id': 31429, 'message': 'Job posting created successfully.', 'success': 'Y'}]
             # job_details = ceipal.get_job("31429")
