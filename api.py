@@ -208,6 +208,7 @@ async def get_job_details(
             if all_job_results[0]["job_code"] == new_data[0]["job_code"]: 
                 
                 final_data["ceipal_job_id"] = all_job_results[0]["id"]
+                final_data["ripple_recruitment_manager"]  =data[0]["client_manager"]
                 final_data["apply_job_without_registration"] = all_job_results[0]["apply_job_without_registration"]
                 final_data["job_description"] = data[0]["job_description"]
                 final_data["status"] = "Job Posted Successfully"
