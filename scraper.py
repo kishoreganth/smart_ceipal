@@ -13,6 +13,8 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import os
 import json
+import pickle
+from datetime import datetime, timedelta
 from selenium.webdriver.common.action_chains import ActionChains
 
 # Load environment variables from .env file
@@ -25,6 +27,105 @@ DEFAULT_PASSWORD = "Smart@2024"
 
 # Create resources directory if it doesn't exist
 os.makedirs('resources', exist_ok=True)
+
+def save_cookies(driver, username):
+    """
+    Save cookies to a file with timestamp for expiration tracking
+    """
+    try:
+        cookie_data = {
+            'cookies': driver.get_cookies(),
+            'timestamp': datetime.now().isoformat(),
+            'username': username
+        }
+        
+        cookies_file = f'resources/cookies_{username}.pkl'
+        with open(cookies_file, 'wb') as f:
+            pickle.dump(cookie_data, f)
+        print(f"Cookies saved to {cookies_file}")
+        return True
+    except Exception as e:
+        print(f"Error saving cookies: {e}")
+        return False
+
+def load_cookies(driver, username):
+    """
+    Load cookies from file if they exist and are not expired
+    Returns True if cookies were loaded successfully, False otherwise
+    """
+    try:
+        cookies_file = f'resources/cookies_{username}.pkl'
+        
+        if not os.path.exists(cookies_file):
+            print(f"No cookies file found for user {username}")
+            return False
+        
+        with open(cookies_file, 'rb') as f:
+            cookie_data = pickle.load(f)
+        
+        # Check if cookies are expired (older than 24 hours by default)
+        timestamp = datetime.fromisoformat(cookie_data['timestamp'])
+        if datetime.now() - timestamp > timedelta(hours=24):
+            print("Cookies are expired, removing file")
+            os.remove(cookies_file)
+            return False
+        
+        # Load cookies into the driver
+        # First navigate to the domain so cookies can be set
+        driver.get("https://ltimindtreeapp.ripplehire.com")
+        
+        for cookie in cookie_data['cookies']:
+            try:
+                # Remove problematic keys that might cause issues
+                cookie_clean = {k: v for k, v in cookie.items() if k not in ['expiry', 'httpOnly', 'secure', 'sameSite']}
+                driver.add_cookie(cookie_clean)
+            except Exception as e:
+                print(f"Error adding cookie {cookie.get('name', 'unknown')}: {e}")
+                continue
+        
+        print(f"Cookies loaded successfully for user {username}")
+        return True
+        
+    except Exception as e:
+        print(f"Error loading cookies: {e}")
+        # Remove corrupted cookie file
+        cookies_file = f'resources/cookies_{username}.pkl'
+        if os.path.exists(cookies_file):
+            try:
+                os.remove(cookies_file)
+                print("Removed corrupted cookies file")
+            except:
+                pass
+        return False
+
+def cleanup_expired_cookies():
+    """
+    Clean up expired cookie files from the resources directory
+    """
+    try:
+        for filename in os.listdir('resources'):
+            if filename.startswith('cookies_') and filename.endswith('.pkl'):
+                filepath = os.path.join('resources', filename)
+                try:
+                    with open(filepath, 'rb') as f:
+                        cookie_data = pickle.load(f)
+                    
+                    timestamp = datetime.fromisoformat(cookie_data['timestamp'])
+                    if datetime.now() - timestamp > timedelta(hours=24):
+                        os.remove(filepath)
+                        print(f"Removed expired cookies file: {filename}")
+                        
+                except Exception as e:
+                    print(f"Error checking/removing {filename}: {e}")
+                    # Remove corrupted files
+                    try:
+                        os.remove(filepath)
+                        print(f"Removed corrupted cookies file: {filename}")
+                    except:
+                        pass
+                        
+    except Exception as e:
+        print(f"Error during cookie cleanup: {e}")
 
 def get_chrome_driver_path():
     """
@@ -148,83 +249,123 @@ def login_and_scrape(username, password, job_id=None):
         # Minimal delay to appear more human-like
         time.sleep(1)
         
-        # Navigate to the login page
-        try:
-            driver.get("https://ltimindtreeapp.ripplehire.com/auth/login")
-            print("Navigating to login page...")
-        except Exception as e:
-            print(f"Error navigating to login page: {e}")
-            return None
+        # Clean up any expired cookies first
+        cleanup_expired_cookies()
         
-        # Take a screenshot of the login page for debugging
-        driver.save_screenshot("resources/login_page.png")
-        print("Saved screenshot of login page to resources/login_page.png")
+        # Try to load existing cookies for this user
+        cookies_loaded = load_cookies(driver, username)
+        if cookies_loaded:
+            print("Loaded existing cookies, attempting to use saved session...")
         
-        # Wait for the username field to be visible and enter credentials - reduce timeout
+        # First, try to navigate directly to the agency page to check if already logged in
         try:
-            WebDriverWait(driver, 8).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input[placeholder='Username']")))
+            print("Attempting to access agency page directly...")
+            print("Loading URL: https://ltimindtreeapp.ripplehire.com/ripplehire/agency")
+            driver.get("https://ltimindtreeapp.ripplehire.com/ripplehire/agency")
+            print(f"URL immediately after driver.get(): {driver.current_url}")
             
-            # Enter username and password
-            print(f"Entering username: {username}")
-            print(f"Entering password: {password}")
-            driver.find_element(By.CSS_SELECTOR, "input[placeholder='Username']").send_keys(username)
-            driver.find_element(By.CSS_SELECTOR, "input[placeholder='Password']").send_keys(password)
-        except TimeoutException:
-            print("Username field didn't appear within the timeout period")
-            driver.save_screenshot("resources/login_timeout.png")
-            return None
-        except Exception as e:
-            print(f"Error entering credentials: {e}")
-            return None
-        
-        # Minimal delay before clicking sign in
-        time.sleep(0.5)
-        
-        # Click the sign in button using its ID (from the screenshot)
-        print("Looking for sign in button...")
-        sign_in_button = None
-        
-        # Try multiple methods to find the button
-        methods = [
-            {"method": "CSS", "desc": "by CSS selector", "find": lambda: driver.find_element(By.CSS_SELECTOR, "input.btn.btn-primary.btn-md")},
-            {"method": "XPATH", "desc": "by button text", "find": lambda: driver.find_element(By.XPATH, "//button[contains(text(),'Sign in')]")},
-            {"method": "ID", "desc": "by ID", "find": lambda: driver.find_element(By.ID, "signinBtn")},
-            {"method": "VALUE", "desc": "by input value", "find": lambda: driver.find_element(By.CSS_SELECTOR, "input[value='Sign in']")},
-            {"method": "CLASS", "desc": "by class", "find": lambda: driver.find_element(By.CLASS_NAME, "login_button")}
-        ]
-        
-        for method in methods:
-            try:
-                sign_in_button = method["find"]()
-                print(f"Found sign in button {method['desc']}")
-                break
-            except Exception:
-                continue
-        
-        if not sign_in_button:
-            print("Could not find the sign in button with any method")
-            return None
+            # Wait a moment for potential redirect
+            time.sleep(2)
             
-        sign_in_button.click()
-        print("Clicked on sign in button")
-        
-        # Wait for login to complete and redirect to the jobs page - reduce delay
-        time.sleep(3)  # Reduced from random.uniform(4, 7)
-        
-        # Take a screenshot after login attempt
-        driver.save_screenshot("resources/after_login.png")
-        print("Saved screenshot after login to resources/after_login.png")
-        
-        # Navigate to the agency/jobs page
-        try:
-            driver.get("https://ltimindtreeapp.ripplehire.com/ripplehire/agency#list")
-            print("Navigating to the agency/jobs page...")
+            # Check current URL to see if we were redirected to login page
+            current_url = driver.current_url
+            print(f"Final URL after waiting for redirects: {current_url}")
+            
+            # If we're on the login page, we need to login
+            if "auth/login" in current_url:
+                print("Not logged in - redirected to login page. Proceeding with login...")
+                
+                # Take a screenshot of the login page for debugging
+                driver.save_screenshot("resources/login_page.png")
+                print("Saved screenshot of login page to resources/login_page.png")
+                
+                # Wait for the username field to be visible and enter credentials
+                try:
+                    WebDriverWait(driver, 8).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input[placeholder='Username']")))
+                    
+                    # Enter username and password
+                    print(f"Entering username: {username}")
+                    print(f"Entering password: {password}")
+                    driver.find_element(By.CSS_SELECTOR, "input[placeholder='Username']").send_keys(username)
+                    driver.find_element(By.CSS_SELECTOR, "input[placeholder='Password']").send_keys(password)
+                except TimeoutException:
+                    print("Username field didn't appear within the timeout period")
+                    driver.save_screenshot("resources/login_timeout.png")
+                    return None
+                except Exception as e:
+                    print(f"Error entering credentials: {e}")
+                    return None
+                
+                # Minimal delay before clicking sign in
+                time.sleep(0.5)
+                
+                # Click the sign in button
+                print("Looking for sign in button...")
+                sign_in_button = None
+                
+                # Try multiple methods to find the button
+                methods = [
+                    {"method": "CSS", "desc": "by CSS selector", "find": lambda: driver.find_element(By.CSS_SELECTOR, "input.btn.btn-primary.btn-md")},
+                    {"method": "XPATH", "desc": "by button text", "find": lambda: driver.find_element(By.XPATH, "//button[contains(text(),'Sign in')]")},
+                    {"method": "ID", "desc": "by ID", "find": lambda: driver.find_element(By.ID, "signinBtn")},
+                    {"method": "VALUE", "desc": "by input value", "find": lambda: driver.find_element(By.CSS_SELECTOR, "input[value='Sign in']")},
+                    {"method": "CLASS", "desc": "by class", "find": lambda: driver.find_element(By.CLASS_NAME, "login_button")}
+                ]
+                
+                for method in methods:
+                    try:
+                        sign_in_button = method["find"]()
+                        print(f"Found sign in button {method['desc']}")
+                        break
+                    except Exception:
+                        continue
+                
+                if not sign_in_button:
+                    print("Could not find the sign in button with any method")
+                    return None
+                    
+                sign_in_button.click()
+                print("Clicked on sign in button")
+                print(f"URL immediately after login click: {driver.current_url}")
+                
+                # Wait for login to complete and redirect to the jobs page
+                time.sleep(3)
+                print(f"URL after waiting for login completion: {driver.current_url}")
+                
+                # Check if login was successful by checking URL
+                if "auth/login" not in driver.current_url:
+                    print("Login appears successful, saving cookies...")
+                    save_cookies(driver, username)
+                else:
+                    print("Login may have failed - still on login page")
+                
+                # Take a screenshot after login attempt
+                driver.save_screenshot("resources/after_login.png")
+                print("Saved screenshot after login to resources/after_login.png")
+                
+                # Navigate to the agency/jobs page after successful login
+                try:
+                    print("Loading URL after login: https://ltimindtreeapp.ripplehire.com/ripplehire/agency")
+                    driver.get("https://ltimindtreeapp.ripplehire.com/ripplehire/agency")
+                    print(f"URL after navigating to agency page: {driver.current_url}")
+                    print("Navigating to the agency/jobs page after login...")
+                except Exception as e:
+                    print(f"Error navigating to agency page after login: {e}")
+                    return None
+            else:
+                print("Already logged in! Proceeding directly to job search...")
+                # Save cookies if we successfully accessed the agency page without login
+                if not cookies_loaded:  # Only save if we didn't load cookies (meaning this is a fresh login)
+                    print("Saving cookies for future use...")
+                    save_cookies(driver, username)
+                
         except Exception as e:
-            print(f"Error navigating to agency page: {e}")
+            print(f"Error accessing agency page: {e}")
             return None
             
         # Wait for the page to load properly - reduce delay
         time.sleep(2)  # Reduced from random.uniform(4, 6)
+        print(f"Final agency page URL before job search: {driver.current_url}")
         
         # Take a screenshot of the jobs page
         driver.save_screenshot("resources/jobs_page.png")
@@ -738,40 +879,89 @@ def login_and_scrape(username, password, job_id=None):
                                         except Exception:
                                             continue
                                 
-                                # Extract recruiter details based on the exact structure from screenshots
+                                # Extract recruiter emails from ul > li structure
+                                recruiter_emails = []
                                 recruiter_info = []
                                 
-                                # Find the job-recruiters-container which holds the recruiter list
-                                recruiter_container = job_details_soup.find('div', {'class': 'job-recruiters-container'})
+                                print("Extracting recruiter emails from ul > li structure...")
                                 
-                                if recruiter_container:
-                                    # Find the job-recruiters-list inside the container
-                                    recruiter_list = recruiter_container.find('ul', {'class': 'job-recruiters-list'})
+                                # Find the ul with class job-recruiters-list
+                                recruiter_list_ul = job_details_soup.find('ul', {'class': lambda x: x and 'job-recruiters-list' in x})
+                                
+                                if recruiter_list_ul:
+                                    # Get all li elements under this ul
+                                    li_elements = recruiter_list_ul.find_all('li')
+                                    print(f"Found {len(li_elements)} li elements in job-recruiters-list")
                                     
-                                    if recruiter_list:
-                                        # Find all li elements with job-recruiter-item class
-                                        recruiter_items = recruiter_list.find_all('li', {'class': 'job-recruiter-item'})
+                                    for i, li in enumerate(li_elements, 1):
+                                        print(f"Processing li element {i}...")
                                         
-                                        for item in recruiter_items:
-                                            recruiter_data = {}
-                                            
-                                            # Extract name from PLR div (shown in screenshot)
-                                            plr_div = item.find('div', {'class': 'PLR'})
-                                            if plr_div:
-                                                name = plr_div.get_text(strip=True)
-                                                if name:
-                                                    recruiter_data['name'] = name
-                                            
-                                            # Extract email from job-recruiter-email anchor
-                                            email_anchor = item.find('a', {'class': 'job-recruiter-email'})
-                                            if email_anchor:
-                                                href = email_anchor.get('href', '')
-                                                if href.startswith('mailto:'):
-                                                    email = href[7:]  # Remove 'mailto:' prefix
-                                                    recruiter_data['email'] = email
-                                            
-                                            if recruiter_data:
+                                        # Find the job-recruiter-email anchor within this li
+                                        email_anchor = li.find('a', {'class': 'job-recruiter-email'})
+                                        
+                                        if email_anchor:
+                                            href = email_anchor.get('href', '')
+                                            if href.startswith('mailto:'):
+                                                email = href[7:]  # Remove 'mailto:' prefix
+                                                recruiter_emails.append(email)
+                                                print(f"  Found email: {email}")
+                                                
+                                                # Also extract name for detailed info
+                                                recruiter_data = {'email': email}
+                                                
+                                                # Try to find name in various div elements within the li
+                                                name_found = False
+                                                
+                                                # Method 1: Look for text content in divs that don't contain email
+                                                divs = li.find_all('div')
+                                                for div in divs:
+                                                    text = div.get_text(strip=True)
+                                                    if (text and len(text) > 2 and '@' not in text and 
+                                                        text not in ['', ' ', '\n'] and 
+                                                        not text.isdigit()):
+                                                        recruiter_data['name'] = text
+                                                        print(f"  Found name: {text}")
+                                                        name_found = True
+                                                        break
+                                                
+                                                # Method 2: If no name found, use email prefix as fallback
+                                                if not name_found:
+                                                    name_from_email = email.split('@')[0].replace('.', ' ')
+                                                    recruiter_data['name'] = name_from_email
+                                                    print(f"  Using name from email: {name_from_email}")
+                                                
                                                 recruiter_info.append(recruiter_data)
+                                        else:
+                                            print(f"  No job-recruiter-email anchor found in li {i}")
+                                else:
+                                    print("No ul with job-recruiters-list class found, trying alternative methods...")
+                                    
+                                    # Fallback: Look for any job-recruiter-email elements anywhere
+                                    email_elements = job_details_soup.find_all('a', {'class': 'job-recruiter-email'})
+                                    print(f"Found {len(email_elements)} job-recruiter-email elements globally")
+                                    
+                                    for email_elem in email_elements:
+                                        href = email_elem.get('href', '')
+                                        if href.startswith('mailto:'):
+                                            email = href[7:]  # Remove 'mailto:' prefix
+                                            recruiter_emails.append(email)
+                                            print(f"Found email: {email}")
+                                            
+                                            # Try to get name from nearby elements
+                                            recruiter_data = {'email': email}
+                                            parent_li = email_elem.find_parent('li')
+                                            if parent_li:
+                                                divs = parent_li.find_all('div')
+                                                for div in divs:
+                                                    text = div.get_text(strip=True)
+                                                    if text and len(text) > 2 and '@' not in text:
+                                                        recruiter_data['name'] = text
+                                                        break
+                                            
+                                            if 'name' not in recruiter_data:
+                                                recruiter_data['name'] = email.split('@')[0].replace('.', ' ')
+                                            
+                                            recruiter_info.append(recruiter_data)
                                 
                                 # If standard approach doesn't find recruiters, try using the exact HTML structure from screenshots
                                 if not recruiter_info:
@@ -841,8 +1031,22 @@ def login_and_scrape(username, password, job_id=None):
                                                 'email': email or "Udayhan.Chauhan@ltimindtree.com"  # Use default if not found
                                             })
                                 
-                                if recruiter_info:
+                                # Print the extracted email list
+                                if recruiter_emails:
+                                    print("\n=== RECRUITER EMAILS LIST ===")
+                                    print("Emails extracted from ul > li structure:")
+                                    for i, email in enumerate(recruiter_emails, 1):
+                                        print(f"  {i}. {email}")
+                                    print("=============================\n")
+                                    
+                                    # Store both detailed info and simple email list
                                     job_details['recruiter'] = recruiter_info
+                                    job_details['recruiter_emails'] = recruiter_emails
+                                    
+                                    print(f"Final recruiter emails list: {recruiter_emails}")
+                                    print(f"Total emails found: {len(recruiter_emails)}")
+                                else:
+                                    print("No recruiter emails found")
                                 
                                 # Save all job details to a separate file
                                 with open('resources/job_details.txt', 'w', encoding='utf-8') as f:

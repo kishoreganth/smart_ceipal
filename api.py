@@ -54,7 +54,7 @@ async def get_job_details(
     """
     Get job details from LTIMindtree RippleHire portal
     
-    Returns job description and recruiter information for the specified job ID
+    Returns job description and recruiter in    formation for the specified job ID
     
     Requires API key authentication via X-API-Key header
     """
@@ -97,28 +97,42 @@ async def get_job_details(
             )
         
         # Call the scraping function with the provided job ID
-        print(f"Attempting to scrape job details from ripplehire for job ID: {job_id}")
-        result = login_and_scrape(username, password, job_id)
-                
-        print("result ", result)
-        print("type of result ", type(result))
-        print(f"Scraper returned result: {result is not None}")
+        ripple_job_type = ""
+        try:
+            print(f"Attempting to scrape job details from ripplehire for job ID: {job_id}")
+            result = login_and_scrape(username, password, job_id)
+            print("result ", result)
+            print("type of result ", type(result))
+            print(f"Scraper returned result: {result is not None}")
+            
+            # check if result is empty or job description is empty
+            if not result or not result.get("job_description"):
+                return JSONResponse(
+                    content={
+                        "status": "error",
+                        "message": "Ripple Hire Job - No job details found or job description is empty. Please try again or check the job ID.",
+                        "data": []
+                    },
+                    status_code=200
+                )
+            
+            # # # Transform the result into the required data format
+            ripple_job_type = result.get("job_type", "")
+            data = transform_job_data(result)
+            print("transformed data ", data)
         
-        # check if result is empty or job description is empty
-        if not result or not result.get("job_description"):
+        except Exception as e:
+            print(f"Error in login_and_scrape: {str(e)}")
             return JSONResponse(
                 content={
                     "status": "error",
-                    "message": "No job details found or job description is empty. Please try again or check the job ID.",
+                    "message": f"Ripple Hire Job Scraper Error: {str(e)}",
                     "data": []
                 },
-                status_code=200
+                status_code=500
             )
-
-        # # # Transform the result into the required data format
-        data = transform_job_data(result)
-        print("transformed data ", data)
         
+
         
 
         
@@ -156,23 +170,89 @@ async def get_job_details(
         
         try:
             ceipal = CeipalAPI(country)
-            ceipal_data =[{
-                "job_title": data[0]["job_title"],
-                "remote_job": 1,
-                "job_status": 6,
-                # "country": "",
-                "client": "z5G7h3l6a1kMvyS65NP3c1Wey4ZBSspA_4KksTSjJxU=",
-                # "states": 0,
-                "recruitment_manager":"z5G7h3l6a1kMvyS65NP3c0wyhFsf0_8F-nELY1aw5Wk=",
-                # "city": "",
-                "job_type": data[0]["job_type"],
-                "client_manager": data[0]["client_manager"],
-                "client_job_id": data[0]["client_job_id"],
-                "primary_skills": data[0]["primary_skills"],
-                "location": data[0]["location"],
-                "job_description": data[0]["job_description"],
-                "client_bill_rate___salary": data[0]["client_bill_rate___salary"]
-            }]
+            
+            client_manager_ids = ceipal.get_client_manager_id()
+            print("client manager id ", client_manager_ids)
+            print("type of client manager id ", type(client_manager_ids))
+            print("recruitment manager emails  ",data[0]["client_manager"])
+            print("type of recruitment manager ids ", type(data[0]["client_manager"]))
+            
+            # # Step 1: Build lookup dictionary with lowercased emails
+            # email_to_id_map = {
+            #     mgr['email_id'].lower(): mgr['id']
+            #     for mgr in client_manager_ids
+            #     if mgr.get('email_id')  # ignore blank emails
+            # }
+            
+            ripple_recruitment_manager = data[0]["client_manager"]
+
+            # Step 1: Create email-to-manager lookup (case-insensitive)
+            email_to_id_map = {
+                mgr['email_id'].lower(): mgr['id']
+                for mgr in client_manager_ids
+                if mgr.get('email_id')  # ignore blank emails
+            }
+            # Step 2: Collect matching manager objects
+            matched_managers = ""
+
+            # for email in ripple_recruitment_manager:
+            email = ripple_recruitment_manager[0]
+            email_lower = email.lower()
+            if email_lower in email_to_id_map:
+                matched_managers = email_to_id_map[email_lower]
+
+                    
+            print("matched managers ", matched_managers)
+            print("type of matched managers ", type(matched_managers))
+
+            data[0]["client_manager"] = matched_managers
+            # recruiter_ids = []
+            # unmatched_emails = []
+            
+            
+            # for email in ripple_recruitment_manager:
+            #     email_lower = email.lower()
+            #     if email_lower in email_to_id_map:
+            #         recruiter_ids.append(email_to_id_map[email_lower])
+            #     else:
+            #         unmatched_emails.append(email)
+            
+            # print("recruiter ids ", recruiter_ids)
+            # data[0]["client_manager"] = recruiter_ids
+            # print("type of recruiter ids ", type(recruiter_ids))
+            # print("unmatched emails ", unmatched_emails)
+            # print("type of unmatched emails ", type(unmatched_emails))
+            
+        except Exception as e:
+            print(f"Error in get_client_manager_id: {str(e)}")
+            return JSONResponse(
+                content={
+                    "status": "error",
+                    "message": f"Error in get_client_manager_id: {str(e)}",
+                    "data": []
+                },
+                status_code=500
+            )
+            
+            
+        try:
+            # ceipal_data =[{
+            #     "job_title": data[0]["job_title"],
+            #     "remote_job": 1,
+            #     "job_status": 6,
+            #     # "country": "",
+            #     "client": "z5G7h3l6a1kMvyS65NP3c1Wey4ZBSspA_4KksTSjJxU=",
+            #     # "states": 0,
+            #     "recruitment_manager":"z5G7h3l6a1kMvyS65NP3c0wyhFsf0_8F-nELY1aw5Wk=",
+            #     # "city": "",
+            #     "job_type": data[0]["job_type"],
+            #     "client_manager": data[0]["client_manager"],
+            #     "client_job_id": data[0]["client_job_id"],
+            #     "primary_skills": data[0]["primary_skills"],
+            #     "location": data[0]["location"],
+            #     "job_description": data[0]["job_description"],
+            #     "client_bill_rate___salary": data[0]["client_bill_rate___salary"]
+            # }]
             print("DATA ", data)
             # This is to create the job post in Ceipal and get the job URL
             new_data = create_job_post(data, ceipal, country)
@@ -184,7 +264,7 @@ async def get_job_details(
                 return JSONResponse(
                     content={
                         "status": "error",
-                        "message": f"Job Failed to post in Ceipal and the ripple job id is {data[0]['client_job_id']}",
+                        "message": f"Ceipal Job Post failed and the ripple job id is {data[0]['client_job_id']}",
                         "data": []
                     },
                     status_code=500
@@ -208,7 +288,9 @@ async def get_job_details(
             if all_job_results[0]["job_code"] == new_data[0]["job_code"]: 
                 
                 final_data["ceipal_job_id"] = all_job_results[0]["id"]
-                final_data["ripple_recruitment_manager"]  =data[0]["client_manager"]
+                final_data["ripple_recruitment_manager"]  = ripple_recruitment_manager
+                final_data["ripple_job_type"] = ripple_job_type
+                final_data["location"] = data[0]["location"]
                 final_data["apply_job_without_registration"] = all_job_results[0]["apply_job_without_registration"]
                 final_data["job_description"] = data[0]["job_description"]
                 final_data["status"] = "Job Posted Successfully"
@@ -228,12 +310,11 @@ async def get_job_details(
     except Exception as e:
         print(f"Error in get_job_details: {str(e)}")
         # Return a default response instead of failing completely
-        data = transform_job_data(None)  # Generate default data
         return JSONResponse(
             content={
                 "status": "error",
                 "message": f"An error occurred: {str(e)}",
-                "data": data
+                "data": []
             },
             status_code=500
         )
@@ -290,26 +371,6 @@ def transform_job_data(result):
     """
     Transform the job scraping result into the required data format
     """
-    # Check if result is None
-    if result is None:
-        print("WARNING: result is None, creating an empty data object")
-        # Return an empty data object with default values
-        return [{
-            "job_title": "Unknown Position",
-            "remote_job": 1,
-            "job_status": 6,
-            # "country": "",
-            "client": "z5G7h3l6a1kMvyS65NP3c1Wey4ZBSspA_4KksTSjJxU=",
-            # "states": 0,
-            "recruitment_manager":"z5G7h3l6a1kMvyS65NP3c0wyhFsf0_8F-nELY1aw5Wk=",
-            # "city": "",
-            "job_description": "",
-            "job_type": 0,
-            "client_manager": "",
-            "client_job_id": "",
-            "primary_skills": "",
-            "location": ""
-        }]
     
     # Parse location into component parts
     location = result.get('location', '') or ''  # Ensure we get a string even if None
@@ -332,23 +393,15 @@ def transform_job_data(result):
     job_type = 1 if job_type_value.lower() == "permanent" else 7
     
     # Transform recruiters to recruitment_manager (taking the first one if multiple exist)
-    recruitment_manager = ""
+    recruiter_emails = []
     recruiters = result.get('recruiters') or []
-    if recruiters and len(recruiters) > 0:
-        recruiter = recruiters[0]
-        if isinstance(recruiter, dict):
-            # Format as "Name <Email>" if both are available
-            if recruiter.get('name') and recruiter.get('email'):
-                recruitment_manager = f"{recruiter['name']} <{recruiter['email']}>"
-            # Just name if only name is available
-            elif recruiter.get('name'):
-                recruitment_manager = recruiter['name']
-            # Just email if only email is available
-            elif recruiter.get('email'):
-                recruitment_manager = recruiter['email']
-        else:
-            # If it's not a dict, convert whatever it is to string
-            recruitment_manager = str(recruiter)
+    for entry in recruiters:
+        try:
+            recruiter_emails.append(entry['email'])
+        except KeyError:
+            print(f"Email key missing in entry: {entry}")
+
+    print(recruiter_emails)
     
     # Extract job title - first check if it's already in the result
     job_title = result.get('job_title', '') or ''
@@ -375,7 +428,7 @@ def transform_job_data(result):
         "client_job_id": client_job_id,
         "primary_skills": primary_skills,
         "location": location,
-        "client_manager": recruitment_manager  # This will be the ripple recruiter
+        "client_manager": recruiter_emails  # This will be the ripple recruiter
     }]
     
     return data
@@ -481,7 +534,6 @@ def create_job_post(data, ceipal, country):
 #     "job_type": "Permanent"
 # }
 # 
-# data = transform_job_data(result)
 # print(data)
 
 

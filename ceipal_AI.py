@@ -27,7 +27,6 @@ class CeipalAPI:
         self.base_url = base_url or os.getenv("CEIPAL_API_URL", "https://api.ceipal.com/v1")
         self.auth_url = f"{self.base_url}/createAuthtoken"
         self.jobs_url = f"{self.base_url}/job-postings"
-        
 
         if country == "USA":
             # Auth credentials
@@ -40,7 +39,10 @@ class CeipalAPI:
             self.email = email or os.getenv("CEIPAL_EMAIL_INDIA")
             self.password = password or os.getenv("CEIPAL_PASSWORD_INDIA")
             self.api_key = api_key or os.getenv("CEIPAL_API_KEY_INDIA")
-        
+            
+            
+        self.client_manager_url = f"https://api.ceipal.com/{self.api_key}/getClientContacts"
+
         # Token info
         self.access_token = None
         self.refresh_token = None
@@ -49,6 +51,27 @@ class CeipalAPI:
         # Check for required credentials
         if not self.email or not self.password or not self.api_key:
             raise ValueError("CEIPAL_EMAIL, CEIPAL_PASSWORD, and CEIPAL_API_KEY are required. Set them as environment variables or pass them to the constructor.")
+    
+    def get_client_manager_id(self):
+        """
+        Get the client manager ID  for the Ceipal API
+        """
+        print("client manager url ", self.client_manager_url)
+        print("auth headers ", self.get_auth_headers())
+        response = requests.request("GET", url=self.client_manager_url, headers=self.get_auth_headers())
+
+        if response.status_code == 200:
+            # Check if response is XML or JSON
+
+            try:
+                return response.json()
+            except Exception:
+                # If not JSON, return text
+                return {}
+        else:
+            error_message = f"Failed to get client manager ID: {response.status_code} - {response.text}"
+            print(error_message)
+            raise Exception(error_message)
     
     def authenticate(self):
         """
